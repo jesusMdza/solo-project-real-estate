@@ -1,0 +1,130 @@
+module Main where
+
+import Daml.Script
+import User
+
+setup : Script ()
+setup = script do
+  builder <- allocatePartyWithHint "Builder" (PartyIdHint "Builder")
+  jack <- allocatePartyWithHint "Jack" (PartyIdHint "Jack")
+  nicole <- allocatePartyWithHint "Nicole" (PartyIdHint "Nicole")
+  admin <- allocatePartyWithHint "Admin" (PartyIdHint "Admin")
+  public <- allocatePartyWithHint "Public" (PartyIdHint "Public")
+
+  -- 'admin' creates platform bank account
+  platformBankAccount <- submit admin do
+    createCmd BankAccount
+      with
+        owner = admin
+        balance = 0.0
+
+  -- 'admin' creates Platform
+  newPlatform <- submit admin do
+    createCmd Platform
+      with
+        admin = admin
+        account = platformBankAccount
+
+  -- 'jack' creates a bank account in order to use real estate app
+  jacksBankAccount <- submit jack do
+    createCmd BankAccount
+      with
+        owner = jack
+        balance = 0.0
+
+  -- 'jack' needs funds so he makes a deposit in his bank account
+  jacksBankAccountWithDeposit <- submit jack do
+    exerciseCmd jacksBankAccount MakeDeposit
+      with
+        amountToDeposit = 100000000.00
+  
+  -- 'jack creates user proposal
+  jacksUserProposal <- submit jack do
+    createCmd UserProposal
+      with
+        user = jack
+        admin
+        account = jacksBankAccountWithDeposit
+        offers = []
+        propertiesOwned = []
+  
+  -- 'admin' accepts
+  jackUser <- submit admin do
+    exerciseCmd jacksUserProposal AcceptUserProposal
+    
+  -- 'nicole' creates bank account
+  nicolesBankAccount <- submit nicole do
+    createCmd BankAccount
+      with 
+        owner = nicole
+        balance = 10000.0
+  
+  -- 'nicole' user proposal
+  nicolesUserProposal <- submit nicole do
+    createCmd UserProposal
+      with
+        user = nicole
+        admin 
+        account = nicolesBankAccount
+        offers = []
+        propertiesOwned = []
+
+  -- 'admin' accepts
+  nicoleUser <- submit admin do
+    exerciseCmd nicolesUserProposal AcceptUserProposal
+  
+  -- 'nicole' mints new property
+  nicoleNewProperty <- submit nicole do
+    exerciseCmd nicoleUser MintProperty
+      with
+        public = [jack]
+        newPrice = 50000.00
+        newAddress = "123 Expensive Street"
+        newBuilderRoyaltyRate = 0.08
+        newPlatformRoyaltyRate = 0.04
+    
+  -- 'nicole' creates new listing
+  createdListings <- submitMulti [nicole] [public] do
+    createCmd Listing
+      with
+        owner = nicole
+        properties = [nicoleNewProperty]
+        public
+  
+  -- 'jack' mints new property
+  jackNewProperty <- submit jack do
+    exerciseCmd jackUser MintProperty
+      with
+        public = [nicole, jack]
+        newPrice = 25000.00
+        newAddress = "442 Apple Lane"
+        newBuilderRoyaltyRate = 0.08
+        newPlatformRoyaltyRate = 0.04
+  
+  -- 'jack' updates the listing
+  jackUpdatesListings <- submitMulti [jack] [public] do
+    exerciseCmd createdListings ListProperty
+      with
+        user = jack
+        newProperty = jackNewProperty
+
+  currentTime <- getTime
+  
+  jackOffersToNicole <- submit jack do
+    createCmd PropertyOffer
+      with
+        admin
+        issuer = jack
+        owner = nicole
+        property = nicoleNewProperty
+        offerPrice = 25000.0
+        timeSubmitted = currentTime
+  
+  -- nicoleAcceptsJacksOffer <- submit nicole do
+  --   exerciseCmd jackOffersToNicole AcceptPropertyOffer
+  --     with
+  --       fromParty = jackUser
+  --       toParty = nicoleUser
+  --       platform = newPlatform
+  
+  return ()
