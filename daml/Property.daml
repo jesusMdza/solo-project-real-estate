@@ -7,7 +7,6 @@ template Property
     admin : Party
     issuer : Party
     owner : Party
-    public : [Party]
     address : Text
     price : Decimal
     builderRoyaltyRate : Decimal
@@ -15,7 +14,7 @@ template Property
     priceHistory : [Decimal]
   where
     signatory issuer, owner
-    observer admin, public
+    observer admin
 
     controller issuer, owner can
       UpdatePropertyRoyaltyRate : ContractId Property

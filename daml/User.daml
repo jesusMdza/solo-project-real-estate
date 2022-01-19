@@ -62,7 +62,6 @@ template User
     controller user can
       nonconsuming MintProperty : (ContractId Property, ContractId BankAccount, ContractId UserProposal)
         with
-          public : [Party]
           newPrice : Decimal
           newAddress : Text
           newBuilderRoyaltyRate : Decimal
@@ -76,7 +75,6 @@ template User
 
           newProperty <- create Property 
             with 
-              public
               admin
               issuer = user
               owner = user
@@ -106,7 +104,7 @@ template Platform
     account : ContractId BankAccount
   where
     signatory platform
-    observer users
+    observer admin, users
 
     controller admin can
       nonconsuming UpdateUsers : ContractId Platform
@@ -155,6 +153,7 @@ template PropertyOffer
         with
           fromParty : Party
           toParty : Party
+          platformParty : Party
           issuerAccount : ContractId BankAccount
           ownerAccount : ContractId BankAccount
           minterAccount : ContractId BankAccount
@@ -215,14 +214,13 @@ template PropertyOffer
               ownerAccount = platformAccount
               property = fetchedProperty
               fromParty = fromParty
-              toParty = toParty
+              toParty = platformParty
             
           newProperty <- create Property
             with
               admin
               issuer = fetchedProperty.issuer
               owner = issuer
-              public = fetchedProperty.public
               address = fetchedProperty.address
               price = fetchedProperty.price
               builderRoyaltyRate = fetchedProperty.builderRoyaltyRate
@@ -243,8 +241,11 @@ template PropertyOffer
         with
           newOfferPrice : Decimal
         do
+          currentTime <- getTime
+
           create PropertyOffer with
             offerPrice = newOfferPrice
+            timeSubmitted = currentTime
             ..
     
       RejectProposal : ()
@@ -258,11 +259,13 @@ template PropertyOffer
         with
           user : ContractId User
         do
-          now <- getTime
+          currentTime <- getTime
           fetchedProperty <- fetch property
           fetchedUser <- fetch user 
 
-          propertyOffer <- create PropertyOffer with ..
+          propertyOffer <- create PropertyOffer with 
+            timeSubmitted = currentTime
+            ..
           
           updatedUser <- create User with
             admin
@@ -272,25 +275,6 @@ template PropertyOffer
             propertiesOwned = fetchedProperty :: fetchedUser.propertiesOwned
           
           return (propertyOffer, updatedUser)
-
-template PropertyHolderPaymentInitiator
-  with
-    amount : Decimal
-    admin : Party
-    owner : Party
-    ownerAccount : ContractId BankAccount
-    timeSubmitted : Time
-  where
-    signatory admin
-    observer owner
-
-    -- controller admin can
-    --   Initiate : (ContractId BankAccount, ContractId Receipt)
-    --     do
-    --       let passedTime = convertRelTimeToMicroseconds (subTime currentTime timeSubmitted)
-    --       let thirtyMinutes = convertRelTimeToMicroseconds (minutes 30)
-
-    --       account <- 
 
 template PropertyOfferPayable
   with
@@ -457,3 +441,22 @@ template PlatformPayable
               timeReceived = currentTime
           
           return (sendingUser, receivingUser, newReceipt)
+
+template PropertyHolderPaymentInitiator
+  with
+    amount : Decimal
+    admin : Party
+    owner : Party
+    ownerAccount : ContractId BankAccount
+    timeSubmitted : Time
+  where
+    signatory admin
+    observer owner
+
+    -- controller admin can
+    --   Initiate : (ContractId BankAccount, ContractId Receipt)
+    --     do
+    --       let passedTime = convertRelTimeToMicroseconds (subTime currentTime timeSubmitted)
+    --       let thirtyMinutes = convertRelTimeToMicroseconds (minutes 30)
+
+    --       account <- 
