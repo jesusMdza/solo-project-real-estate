@@ -1,0 +1,20 @@
+module Bank where
+
+template BankAccount
+  with
+    owner : Party
+    balance : Decimal
+  where
+    signatory owner
+
+    ensure
+      balance >= 0.0
+
+    controller owner can
+      MakeDeposit : ContractId BankAccount
+        with
+          amountToDeposit : Decimal
+        do
+          create BankAccount with
+            owner
+            balance = balance + amountToDeposit

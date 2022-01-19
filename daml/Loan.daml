@@ -1,0 +1,50 @@
+module Loan where
+
+import Bank
+
+template LoanMaker
+  with
+    issuer : Party
+    amount : Decimal
+  where
+    signatory issuer
+
+template LoanProposal 
+  with
+    amount : Decimal
+    issuer : Party
+    owner : Party
+  where
+    signatory issuer
+
+    controller owner can
+      AcceptLoanProposal : ContractId Loan
+        do
+          create Loan with
+            amount
+            issuer = owner
+            debtor = issuer
+
+      RejectLoanProposal : ()
+        do return ()
+
+template Loan
+  with
+    amount : Decimal
+    issuer : Party
+    debtor : Party
+  where
+    signatory issuer
+    observer debtor
+    
+    controller debtor can
+      AcceptLoan : ContractId BankAccount
+        with
+          debtorAccount : ContractId BankAccount
+        do
+          account <- fetch debtorAccount
+
+          create BankAccount 
+            with
+              owner = debtor
+              balance = account.balance + amount

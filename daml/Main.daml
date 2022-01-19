@@ -2,6 +2,7 @@ module Main where
 
 import Daml.Script
 import User
+import Bank
 
 setup : Script ()
 setup = script do
@@ -147,5 +148,5 @@ setup = script do
 
   -- submit admin do
   --   exerciseCmd jackAfterPlatformPayable AcceptUserProposal
-  
+
   return ()

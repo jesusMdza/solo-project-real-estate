@@ -1,6 +1,7 @@
 module User where
 
 import DA.Time
+import Bank
 
 template UserProposal
   with
@@ -69,70 +70,42 @@ template User
           
           return (newProperty, newBankAccount, nicoleUpdateProposal)
 
-template BankAccount
+-- PLATFORM
+
+template Platform 
   with
-    owner : Party
-    balance : Decimal
+    platform : Party
+    admin : Party
+    users : [Party]
+    account : ContractId BankAccount
   where
-    signatory owner
+    signatory platform
+    observer users
 
-    ensure
-      balance >= 0.0
-
-    controller owner can
-      MakeDeposit : ContractId BankAccount
+    controller admin can
+      nonconsuming UpdateUsers : ContractId Platform
         with
-          amountToDeposit : Decimal
+          userToAdd : Party
         do
-          create BankAccount with
-            owner
-            balance = balance + amountToDeposit
-      
-      -- Transfer : (ContractId BankAccount, ContractId Funds)
-      --   with
-      --     sender : Party
-      --     receiver : Party
-      --     amountToTransfer : Decimal
-      --   do
-      --     account <- create BankAccount with
-      --       balance = balance - amountToTransfer
-      --       ..
-          
-      --     funds <- create Funds with
-      --       amount = amountToTransfer
-      --       sender
-      --       receiver
-          
-      --     return (account, funds)
+          create Platform
+            with
+              users = userToAdd :: users
+              ..
 
--- template Funds
---   with
---     amount : Decimal
---     sender : Party
---     receiver : Party
---   where
---     signatory sender
+-- PAYABLES
 
---     controller receiver can
---       AcceptFunds : (ContractId BankAccount, ContractId Receipt)
---         with
---           bankAccount : ContractId BankAccount
---         do
---           account <- fetch bankAccount
+template Receipt
+  with
+    amount : Decimal
+    sender : Party
+    receiver : Party
+    timeReceived : Time
+  where
+    signatory sender, receiver
 
---           newAccount <- create BankAccount
---             with
---               owner = receiver
---               balance = account.balance + amount
-          
---           currentTime <- getTime
---           receipt <- create Receipt with
---             amount
---             sender = sender
---             receiver = receiver
---             timeReceived = currentTime
-
---           return (newAccount, receipt)
+    controller receiver can
+      Dismiss : ()
+        do return ()
 
 template Property
   with
@@ -174,63 +147,6 @@ template Property
             price = newPrice
             priceHistory = newPrice :: priceHistory
             ..
-
-template PropertyHolderPaymentInitiator
-  with
-    amount : Decimal
-    admin : Party
-    owner : Party
-    ownerAccount : ContractId BankAccount
-    timeSubmitted : Time
-  where
-    signatory admin
-    observer owner
-
-    -- controller admin can
-    --   Initiate : (ContractId BankAccount, ContractId Receipt)
-    --     do
-    --       let passedTime = convertRelTimeToMicroseconds (subTime currentTime timeSubmitted)
-    --       let thirtyMinutes = convertRelTimeToMicroseconds (minutes 30)
-
-    --       account <- 
-
-template Listing 
-  with
-    admin : Party
-    users : [Party]
-    owner : Party
-    properties : [ContractId Property]
-  where
-    signatory owner
-    observer admin, users
-
-    nonconsuming choice ListProperty : ContractId Listing
-      with
-        user : Party
-        newProperty : ContractId Property
-      controller user
-      do
-        property <- fetch newProperty
-        assertMsg 
-          "User needs to be the owner in order to List the property." 
-          (property.owner == user)
-        
-        create Listing with 
-          admin
-          users
-          owner
-          properties = newProperty :: properties
-
-template PropertyAgreement
-  with
-    admin : Party
-    issuer : Party
-    owner : Party
-    property : Property
-    offerPrice : Decimal
-  where
-    signatory issuer, owner
-    observer admin
 
 template PropertyOffer
   with
@@ -401,29 +317,62 @@ template PropertyCounterOffer
         do
           create PropertyAgreement with ..
 
--- PLATFORM
-
-template Platform 
+template PropertyHolderPaymentInitiator
   with
-    platform : Party
+    amount : Decimal
+    admin : Party
+    owner : Party
+    ownerAccount : ContractId BankAccount
+    timeSubmitted : Time
+  where
+    signatory admin
+    observer owner
+
+    -- controller admin can
+    --   Initiate : (ContractId BankAccount, ContractId Receipt)
+    --     do
+    --       let passedTime = convertRelTimeToMicroseconds (subTime currentTime timeSubmitted)
+    --       let thirtyMinutes = convertRelTimeToMicroseconds (minutes 30)
+
+    --       account <- 
+
+template PropertyAgreement
+  with
+    admin : Party
+    issuer : Party
+    owner : Party
+    property : Property
+    offerPrice : Decimal
+  where
+    signatory issuer, owner
+    observer admin
+    
+template Listing 
+  with
     admin : Party
     users : [Party]
-    account : ContractId BankAccount
+    owner : Party
+    properties : [ContractId Property]
   where
-    signatory platform
-    observer users
+    signatory owner
+    observer admin, users
 
-    controller admin can
-      nonconsuming UpdateUsers : ContractId Platform
-        with
-          userToAdd : Party
-        do
-          create Platform
-            with
-              users = userToAdd :: users
-              ..
-
--- PAYABLES
+    nonconsuming choice ListProperty : ContractId Listing
+      with
+        user : Party
+        newProperty : ContractId Property
+      controller user
+      do
+        property <- fetch newProperty
+        assertMsg 
+          "User needs to be the owner in order to List the property." 
+          (property.owner == user)
+        
+        create Listing with 
+          admin
+          users
+          owner
+          properties = newProperty :: properties
 
 template PropertyOfferPayable
   with
@@ -449,8 +398,6 @@ template PropertyOfferPayable
 
           fetchedSendingParty <- fetch sending
           fetchedReceivingParty <- fetch receiving
-
-          -- find a way to transfer funds instead
 
           sendingBankAccount <- create BankAccount
             with
@@ -592,65 +539,3 @@ template PlatformPayable
               timeReceived = currentTime
           
           return (sendingUser, receivingUser, newReceipt)
-
-template Receipt
-  with
-    amount : Decimal
-    sender : Party
-    receiver : Party
-    timeReceived : Time
-  where
-    signatory sender, receiver
-
-    controller receiver can
-      Dismiss : ()
-        do return ()
-
--- STRETCH
-
-template LoanMaker
-  with
-    issuer : Party
-    amount : Decimal
-  where
-    signatory issuer
-
-template LoanProposal 
-  with
-    amount : Decimal
-    issuer : Party
-    owner : Party
-  where
-    signatory issuer
-
-    controller owner can
-      AcceptLoanProposal : ContractId Loan
-        do
-          create Loan with
-            amount
-            issuer = owner
-            debtor = issuer
-
-      RejectLoanProposal : ()
-        do return ()
-
-template Loan
-  with
-    amount : Decimal
-    issuer : Party
-    debtor : Party
-  where
-    signatory issuer
-    observer debtor
-    
-    controller debtor can
-      AcceptLoan : ContractId BankAccount
-        with
-          debtorAccount : ContractId BankAccount
-        do
-          account <- fetch debtorAccount
-
-          create BankAccount 
-            with
-              owner = debtor
-              balance = account.balance + amount
