@@ -1,0 +1,83 @@
+module Property where
+
+import Bank
+
+template Property
+  with
+    admin : Party
+    issuer : Party
+    owner : Party
+    public : [Party]
+    address : Text
+    price : Decimal
+    builderRoyaltyRate : Decimal
+    platformRoyaltyRate : Decimal
+    priceHistory : [Decimal]
+  where
+    signatory issuer, owner
+    observer admin, public
+
+    controller issuer, owner can
+      UpdatePropertyRoyaltyRate : ContractId Property
+        with
+          newPlatformRoyaltyRate : Decimal
+        do  
+          assertMsg 
+            "Issuer needs to be the owner in order to update the property royalty rate." 
+            (issuer == owner)
+
+          assertMsg 
+            "Owner needs to be the issuer in order to update the property royalty rate." 
+            (owner == issuer)
+
+          create Property with 
+            platformRoyaltyRate = newPlatformRoyaltyRate
+            ..
+
+      UpdatePrice : ContractId Property
+        with
+          newPrice : Decimal
+        do
+          create Property with
+            price = newPrice
+            priceHistory = newPrice :: priceHistory
+            ..
+
+template PropertyCounterOffer
+  with
+    admin : Party
+    issuer : Party
+    owner : Party
+    account : BankAccount
+    property : Property
+    offerPrice : Decimal
+  where
+    signatory property.owner
+    observer issuer, admin
+    
+    controller owner can
+      CreateCounterOffer : ContractId PropertyCounterOffer
+        with
+          newOfferPrice : Decimal
+        do 
+          create PropertyCounterOffer
+            with
+              offerPrice = newOfferPrice
+              ..
+    
+    controller issuer can
+      AcceptCounterOffer : ContractId PropertyAgreement
+        do
+          create PropertyAgreement with ..
+
+template PropertyAgreement
+  with
+    admin : Party
+    issuer : Party
+    owner : Party
+    property : Property
+    offerPrice : Decimal
+  where
+    signatory issuer, owner
+    observer admin
+

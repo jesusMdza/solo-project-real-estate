@@ -2,6 +2,7 @@ module User where
 
 import DA.Time
 import Bank
+import Property
 
 template UserProposal
   with
@@ -20,6 +21,33 @@ template UserProposal
           
       RejectUserProposal : ()
         do return ()
+
+template Listing 
+  with
+    admin : Party
+    users : [Party]
+    owner : Party
+    properties : [ContractId Property]
+  where
+    signatory owner
+    observer admin, users
+
+    nonconsuming choice ListProperty : ContractId Listing
+      with
+        user : Party
+        newProperty : ContractId Property
+      controller user
+      do
+        property <- fetch newProperty
+        assertMsg 
+          "User needs to be the owner in order to List the property." 
+          (property.owner == user)
+        
+        create Listing with 
+          admin
+          users
+          owner
+          properties = newProperty :: properties
 
 template User
   with
@@ -70,8 +98,6 @@ template User
           
           return (newProperty, newBankAccount, nicoleUpdateProposal)
 
--- PLATFORM
-
 template Platform 
   with
     platform : Party
@@ -92,8 +118,6 @@ template Platform
               users = userToAdd :: users
               ..
 
--- PAYABLES
-
 template Receipt
   with
     amount : Decimal
@@ -106,47 +130,6 @@ template Receipt
     controller receiver can
       Dismiss : ()
         do return ()
-
-template Property
-  with
-    admin : Party
-    issuer : Party
-    owner : Party
-    public : [Party]
-    address : Text
-    price : Decimal
-    builderRoyaltyRate : Decimal
-    platformRoyaltyRate : Decimal
-    priceHistory : [Decimal]
-  where
-    signatory issuer, owner
-    observer admin, public
-
-    controller issuer, owner can
-      UpdatePropertyRoyaltyRate : ContractId Property
-        with
-          newPlatformRoyaltyRate : Decimal
-        do  
-          assertMsg 
-            "Issuer needs to be the owner in order to update the property royalty rate." 
-            (issuer == owner)
-
-          assertMsg 
-            "Owner needs to be the issuer in order to update the property royalty rate." 
-            (owner == issuer)
-
-          create Property with 
-            platformRoyaltyRate = newPlatformRoyaltyRate
-            ..
-
-      UpdatePrice : ContractId Property
-        with
-          newPrice : Decimal
-        do
-          create Property with
-            price = newPrice
-            priceHistory = newPrice :: priceHistory
-            ..
 
 template PropertyOffer
   with
@@ -290,33 +273,6 @@ template PropertyOffer
           
           return (propertyOffer, updatedUser)
 
-template PropertyCounterOffer
-  with
-    admin : Party
-    issuer : Party
-    owner : Party
-    account : BankAccount
-    property : Property
-    offerPrice : Decimal
-  where
-    signatory property.owner
-    observer issuer, admin
-    
-    controller owner can
-      CreateCounterOffer : ContractId PropertyCounterOffer
-        with
-          newOfferPrice : Decimal
-        do 
-          create PropertyCounterOffer
-            with
-              offerPrice = newOfferPrice
-              ..
-    
-    controller issuer can
-      AcceptCounterOffer : ContractId PropertyAgreement
-        do
-          create PropertyAgreement with ..
-
 template PropertyHolderPaymentInitiator
   with
     amount : Decimal
@@ -335,44 +291,6 @@ template PropertyHolderPaymentInitiator
     --       let thirtyMinutes = convertRelTimeToMicroseconds (minutes 30)
 
     --       account <- 
-
-template PropertyAgreement
-  with
-    admin : Party
-    issuer : Party
-    owner : Party
-    property : Property
-    offerPrice : Decimal
-  where
-    signatory issuer, owner
-    observer admin
-    
-template Listing 
-  with
-    admin : Party
-    users : [Party]
-    owner : Party
-    properties : [ContractId Property]
-  where
-    signatory owner
-    observer admin, users
-
-    nonconsuming choice ListProperty : ContractId Listing
-      with
-        user : Party
-        newProperty : ContractId Property
-      controller user
-      do
-        property <- fetch newProperty
-        assertMsg 
-          "User needs to be the owner in order to List the property." 
-          (property.owner == user)
-        
-        create Listing with 
-          admin
-          users
-          owner
-          properties = newProperty :: properties
 
 template PropertyOfferPayable
   with
