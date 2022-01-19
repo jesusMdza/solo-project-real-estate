@@ -10,6 +10,7 @@ setup = script do
   david <- allocatePartyWithHint "David" (PartyIdHint "David")
   admin <- allocatePartyWithHint "Admin" (PartyIdHint "Admin")
   public <- allocatePartyWithHint "Public" (PartyIdHint "Public")
+  loanMaker <- allocatePartyWithHint "LoanMaker" (PartyIdHint "LoanMaker")
 
   -- 'admin' creates platform bank account
   platformBankAccount <- submit admin do
@@ -96,7 +97,6 @@ setup = script do
         newPrice = 50000.00
         newAddress = "123 Expensive Street"
         newBuilderRoyaltyRate = 0.08
-        newPlatformRoyaltyRate = 0.04
   
   submit admin do
     exerciseCmd nicoleUpdateProposal AcceptUserProposal
@@ -139,10 +139,53 @@ setup = script do
         sending = jackUser
         receiving = nicoleUser
 
-  submit admin do
+  jackUpdateUser <- submit admin do
     exerciseCmd proposal1 AcceptUserProposal
 
-  submit admin do
+  nicoleUpdateUser <- submit admin do
     exerciseCmd proposal2 AcceptUserProposal
+
+  -- (jackAfterPlatformPayable, platformAfterPayable, _) <- submitMulti [nicole] [admin] do
+  --   exerciseCmd platformPayable AcceptPlatformPayable
+  --     with
+  --       sending = jackUpdateUser
+  --       receiving = newPlatform
+
+  -- submit admin do
+  --   exerciseCmd jackAfterPlatformPayable AcceptUserProposal
+
+  -- 'david'
+  davidsAccount <- submit david do
+    createCmd BankAccount
+      with
+        owner = david
+        balance = 0.0
+
+  davidUpdatedAccount <- submit david do
+    exerciseCmd davidsAccount MakeDeposit
+      with
+        amountToDeposit = 100000000.00
+  
+  davidUserProposal <- submit david do
+    createCmd UserProposal
+      with
+        user = david
+        admin
+        account = davidUpdatedAccount
+        offers = []
+        propertiesOwned = []
+
+  davidUser <- submit admin do
+    exerciseCmd davidUserProposal AcceptUserProposal
+  
+  davidLoanProposal <- submit david do
+    createCmd LoanProposal
+      with
+        amount = 70000.0
+        issuer = david
+        owner = loanMaker
+  
+  loanMakerAccets <- submit loanMaker do
+    exerciseCmd davidLoanProposal AcceptLoanProposal
 
   return ()

@@ -24,13 +24,13 @@ template UserProposal
 template User
   with
     user : Party
-    admin : Party
+    admin : Party                                                                                        
     account : ContractId BankAccount
     offers : [PropertyOffer]
     propertiesOwned : [Property]
   where
     signatory user, admin
-    
+
     controller user can
       nonconsuming MintProperty : (ContractId Property, ContractId BankAccount, ContractId UserProposal)
         with
@@ -38,7 +38,6 @@ template User
           newPrice : Decimal
           newAddress : Text
           newBuilderRoyaltyRate : Decimal
-          newPlatformRoyaltyRate : Decimal
         do
           accountInfo <- fetch account
 
@@ -56,7 +55,7 @@ template User
               price = newPrice
               address = newAddress
               builderRoyaltyRate = newBuilderRoyaltyRate
-              platformRoyaltyRate = newPlatformRoyaltyRate
+              platformRoyaltyRate = 0.04
               priceHistory = [newPrice]
           
           fetchedProperty <- fetch newProperty
@@ -90,51 +89,51 @@ template BankAccount
             owner
             balance = balance + amountToDeposit
       
-      Transfer : (ContractId BankAccount, ContractId Funds)
-        with
-          sender : Party
-          receiver : Party
-          amountToTransfer : Decimal
-        do
-          account <- create BankAccount with
-            balance = balance - amountToTransfer
-            ..
+      -- Transfer : (ContractId BankAccount, ContractId Funds)
+      --   with
+      --     sender : Party
+      --     receiver : Party
+      --     amountToTransfer : Decimal
+      --   do
+      --     account <- create BankAccount with
+      --       balance = balance - amountToTransfer
+      --       ..
           
-          funds <- create Funds with
-            amount = amountToTransfer
-            sender
-            receiver
+      --     funds <- create Funds with
+      --       amount = amountToTransfer
+      --       sender
+      --       receiver
           
-          return (account, funds)
+      --     return (account, funds)
 
-template Funds
-  with
-    amount : Decimal
-    sender : Party
-    receiver : Party
-  where
-    signatory sender
+-- template Funds
+--   with
+--     amount : Decimal
+--     sender : Party
+--     receiver : Party
+--   where
+--     signatory sender
 
-    controller receiver can
-      AcceptFunds : (ContractId BankAccount, ContractId Receipt)
-        with
-          bankAccount : ContractId BankAccount
-        do
-          account <- fetch bankAccount
+--     controller receiver can
+--       AcceptFunds : (ContractId BankAccount, ContractId Receipt)
+--         with
+--           bankAccount : ContractId BankAccount
+--         do
+--           account <- fetch bankAccount
 
-          newAccount <- create BankAccount
-            with
-              owner = receiver
-              balance = account.balance + amount
+--           newAccount <- create BankAccount
+--             with
+--               owner = receiver
+--               balance = account.balance + amount
           
-          currentTime <- getTime
-          receipt <- create Receipt with
-            amount
-            sender = sender
-            receiver = receiver
-            timeReceived = currentTime
+--           currentTime <- getTime
+--           receipt <- create Receipt with
+--             amount
+--             sender = sender
+--             receiver = receiver
+--             timeReceived = currentTime
 
-          return (newAccount, receipt)
+--           return (newAccount, receipt)
 
 template Property
   with
@@ -268,7 +267,6 @@ template PropertyOffer
             with 
               property = fetchedProperty
               ..
-          
 
           propertyOfferPayable <- create PropertyOfferPayable
             with
@@ -472,47 +470,50 @@ template ConditionalRoyaltyPayable
     toParty : Party
   where
     signatory fromParty
-    observer admin
+    observer admin, toParty
 
     controller toParty can 
       AcceptConditionalPayable : (ContractId User, ContractId User, ContractId Receipt)
         with
-          sending : User
-          receiving : User
+          sending : ContractId User
+          receiving : ContractId User
         do
           issuerAccountInfo <- fetch issuerAccount
           receiverAccountInfo <- fetch minterAccount
 
-          sBankAccount <- create BankAccount
+          fetchedSendingParty <- fetch sending
+          fetchedReceivingParty <- fetch receiving
+
+          sendingBankAccount <- create BankAccount
             with
-              owner = sending.user
+              owner = fromParty
               balance = issuerAccountInfo.balance - amount
           
-          rBankAccount <- create BankAccount
+          receivingBankAccount <- create BankAccount
             with
-              owner = receiving.user
+              owner = toParty
               balance = receiverAccountInfo.balance + amount
 
           sendingUser <- create User
             with
-              user = sending.user
+              user = fromParty
               admin
-              account = sBankAccount
-              offers = sending.offers
-              propertiesOwned = sending.propertiesOwned
+              account = sendingBankAccount
+              offers = fetchedSendingParty.offers
+              propertiesOwned = fetchedSendingParty.propertiesOwned
             
           receivingUser <- create User
             with
-              user = receiving.user
+              user = fetchedReceivingParty.user
               admin
-              account = rBankAccount
-              offers = sending.offers
-              propertiesOwned = sending.propertiesOwned
+              account = receivingBankAccount
+              offers = fetchedSendingParty.offers
+              propertiesOwned = fetchedSendingParty.propertiesOwned
 
           currentTime <- getTime
           newReceipt <- create Receipt
             with
-              amount = property.price
+              amount = property.builderRoyaltyRate
               sender = fromParty
               receiver = toParty
               timeReceived = currentTime
@@ -530,47 +531,48 @@ template PlatformPayable
     toParty : Party
   where
     signatory fromParty
-    observer admin
+    observer admin, toParty
 
     controller toParty can
-      AcceptPlatformPayable : (ContractId User, ContractId User, ContractId Receipt)
+      AcceptPlatformPayable : (ContractId UserProposal, ContractId Platform, ContractId Receipt)
         with
-          sending : User
-          receiving : Platform
+          sending : ContractId User
+          receiving : ContractId Platform
         do
           issuerAccountInfo <- fetch issuerAccount
           receiverAccountInfo <- fetch ownerAccount
 
+          fetchedSendingParty <- fetch sending
+          fetchedPlatform <- fetch receiving
+
           sendingBankAccount <- create BankAccount
             with
-              owner = sending.user
+              owner = fromParty
               balance = issuerAccountInfo.balance - property.platformRoyaltyRate
           
           receivingBankAccount <- create BankAccount
             with
-              owner = receiving.admin
+              owner = admin
               balance = receiverAccountInfo.balance + property.platformRoyaltyRate
 
-          sendingUser <- create User
+          sendingUser <- create UserProposal
             with
-              user = sending.user
+              user = fromParty
               admin
               account = sendingBankAccount
-              offers = sending.offers
-              propertiesOwned = sending.propertiesOwned
+              offers = fetchedSendingParty.offers
+              propertiesOwned = fetchedSendingParty.propertiesOwned
             
-          receivingUser <- create User
+          receivingUser <- create Platform
             with
-              user = receiving.admin
               admin
+              users = fetchedPlatform.users
               account = receivingBankAccount
-              offers = sending.offers
-              propertiesOwned = sending.propertiesOwned
 
           currentTime <- getTime
           newReceipt <- create Receipt
             with
-              amount = property.price
+              amount = property.platformRoyaltyRate
               sender = fromParty
               receiver = toParty
               timeReceived = currentTime
@@ -589,3 +591,52 @@ template Receipt
     controller receiver can
       Dismiss : ()
         do return ()
+
+-- STRETCH
+
+template LoanMaker
+  with
+    issuer : Party
+    amount : Decimal
+  where
+    signatory issuer
+
+template LoanProposal 
+  with
+    amount : Decimal
+    issuer : Party
+    owner : Party
+  where
+    signatory issuer
+
+    controller owner can
+      AcceptLoanProposal : ContractId Loan
+        do
+          create Loan with
+            amount
+            issuer = owner
+            debtor = issuer
+
+      RejectLoanProposal : ()
+        do return ()
+
+template Loan
+  with
+    amount : Decimal
+    issuer : Party
+    debtor : Party
+  where
+    signatory issuer
+    observer debtor
+    
+    controller debtor can
+      AcceptLoan : ContractId BankAccount
+        with
+          debtorAccount : ContractId BankAccount
+        do
+          account <- fetch debtorAccount
+
+          create BankAccount 
+            with
+              owner = debtor
+              balance = account.balance + amount
