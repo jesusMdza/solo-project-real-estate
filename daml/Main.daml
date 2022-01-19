@@ -7,22 +7,21 @@ setup : Script ()
 setup = script do
   jack <- allocatePartyWithHint "Jack" (PartyIdHint "Jack")
   nicole <- allocatePartyWithHint "Nicole" (PartyIdHint "Nicole")
-  david <- allocatePartyWithHint "David" (PartyIdHint "David")
   admin <- allocatePartyWithHint "Admin" (PartyIdHint "Admin")
-  public <- allocatePartyWithHint "Public" (PartyIdHint "Public")
-  loanMaker <- allocatePartyWithHint "LoanMaker" (PartyIdHint "LoanMaker")
+  platform <- allocatePartyWithHint "Platform" (PartyIdHint "Platform")
 
-  -- 'admin' creates platform bank account
-  platformBankAccount <- submit admin do
+  -- Platform bank account created
+  platformBankAccount <- submit platform do
     createCmd BankAccount
       with
-        owner = admin
+        owner = platform
         balance = 0.0
 
-  -- 'admin' creates Platform
-  newPlatform <- submit admin do
+  -- Platform created
+  newPlatform <- submit platform do
     createCmd Platform
       with
+        platform
         admin = admin
         users = []
         account = platformBankAccount
@@ -81,10 +80,11 @@ setup = script do
   nicoleUser <- submit admin do
     exerciseCmd nicolesUserProposal AcceptUserProposal
 
-  -- 'admin' updates Platform
-  nicoleUpdatedPlatform <- submit admin do
+  -- Platform updated
+  nicoleUpdatedPlatform <- submit platform do
     createCmd Platform
       with
+        platform
         admin
         users = [jack, nicole]
         account = platformBankAccount
@@ -155,37 +155,5 @@ setup = script do
   --   exerciseCmd jackAfterPlatformPayable AcceptUserProposal
 
   -- 'david'
-  davidsAccount <- submit david do
-    createCmd BankAccount
-      with
-        owner = david
-        balance = 0.0
-
-  davidUpdatedAccount <- submit david do
-    exerciseCmd davidsAccount MakeDeposit
-      with
-        amountToDeposit = 100000000.00
-  
-  davidUserProposal <- submit david do
-    createCmd UserProposal
-      with
-        user = david
-        admin
-        account = davidUpdatedAccount
-        offers = []
-        propertiesOwned = []
-
-  davidUser <- submit admin do
-    exerciseCmd davidUserProposal AcceptUserProposal
-  
-  davidLoanProposal <- submit david do
-    createCmd LoanProposal
-      with
-        amount = 70000.0
-        issuer = david
-        owner = loanMaker
-  
-  loanMakerAccets <- submit loanMaker do
-    exerciseCmd davidLoanProposal AcceptLoanProposal
 
   return ()

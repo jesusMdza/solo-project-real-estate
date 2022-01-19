@@ -1,7 +1,6 @@
 module User where
 
 import DA.Time
-import DA.List
 
 template UserProposal
   with
@@ -176,6 +175,25 @@ template Property
             priceHistory = newPrice :: priceHistory
             ..
 
+template PropertyHolderPaymentInitiator
+  with
+    amount : Decimal
+    admin : Party
+    owner : Party
+    ownerAccount : ContractId BankAccount
+    timeSubmitted : Time
+  where
+    signatory admin
+    observer owner
+
+    -- controller admin can
+    --   Initiate : (ContractId BankAccount, ContractId Receipt)
+    --     do
+    --       let passedTime = convertRelTimeToMicroseconds (subTime currentTime timeSubmitted)
+    --       let thirtyMinutes = convertRelTimeToMicroseconds (minutes 30)
+
+    --       account <- 
+
 template Listing 
   with
     admin : Party
@@ -311,6 +329,14 @@ template PropertyOffer
               builderRoyaltyRate = fetchedProperty.builderRoyaltyRate
               platformRoyaltyRate = fetchedProperty.platformRoyaltyRate
               priceHistory = fetchedProperty.priceHistory
+          
+          -- propertyHolderPaymentInitiator <- create PropertyHolderPaymentInitiator
+          --   with
+          --     amount = offerPrice * 0.01
+          --     admin
+          --     owner = issuer
+          --     ownerAccount
+          --     timeSubmitted = currentTime
 
           return (propertyAgreement, propertyOfferPayable, platformPayable, conditionalRoyaltyPayment, newProperty)
     
@@ -379,11 +405,12 @@ template PropertyCounterOffer
 
 template Platform 
   with
+    platform : Party
     admin : Party
     users : [Party]
     account : ContractId BankAccount
   where
-    signatory admin
+    signatory platform
     observer users
 
     controller admin can
@@ -565,6 +592,7 @@ template PlatformPayable
             
           receivingUser <- create Platform
             with
+              platform = fetchedPlatform.platform
               admin
               users = fetchedPlatform.users
               account = receivingBankAccount
