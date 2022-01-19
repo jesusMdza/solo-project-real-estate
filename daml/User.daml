@@ -439,7 +439,7 @@ template PropertyOfferPayable
     observer admin, toParty
 
     controller toParty can
-      AcceptOwnerPayable : (ContractId UserProposal, ContractId UserProposal, ContractId Receipt)
+      AcceptOwnerPayable : (ContractId BankAccount, ContractId BankAccount, ContractId Receipt)
         with
           sending : ContractId User
           receiving : ContractId User
@@ -449,6 +449,8 @@ template PropertyOfferPayable
 
           fetchedSendingParty <- fetch sending
           fetchedReceivingParty <- fetch receiving
+
+          -- find a way to transfer funds instead
 
           sendingBankAccount <- create BankAccount
             with
@@ -460,22 +462,6 @@ template PropertyOfferPayable
               owner = toParty
               balance = receiverAccountInfo.balance + amount
 
-          sendingUserProposal <- create UserProposal
-            with
-              user = fromParty
-              admin
-              account = sendingBankAccount
-              offers = fetchedSendingParty.offers
-              propertiesOwned = property :: fetchedSendingParty.propertiesOwned
-          
-          receivingUserProposal <- create UserProposal
-            with
-              user = toParty
-              admin
-              account = receivingBankAccount
-              offers = fetchedSendingParty.offers
-              propertiesOwned = fetchedSendingParty.propertiesOwned
-
           currentTime <- getTime
           newReceipt <- create Receipt
             with
@@ -484,7 +470,7 @@ template PropertyOfferPayable
               receiver = toParty
               timeReceived = currentTime
           
-          return (sendingUserProposal, receivingUserProposal, newReceipt)
+          return (sendingBankAccount, receivingBankAccount, newReceipt)
 
 template ConditionalRoyaltyPayable
   with

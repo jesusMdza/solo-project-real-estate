@@ -132,18 +132,12 @@ setup = script do
         minterAccount = nicolesBankAccount
         platformAccount = platformBankAccount
         platform = newPlatform
-  
-  (proposal1, proposal2, _) <- submitMulti [nicole] [admin] do
+
+  (bank1, bank2, _) <- submitMulti [nicole] [admin] do
     exerciseCmd propertyOfferPayable AcceptOwnerPayable
       with
         sending = jackUser
         receiving = nicoleUser
-
-  jackUpdateUser <- submit admin do
-    exerciseCmd proposal1 AcceptUserProposal
-
-  nicoleUpdateUser <- submit admin do
-    exerciseCmd proposal2 AcceptUserProposal
 
   -- (jackAfterPlatformPayable, platformAfterPayable, _) <- submitMulti [nicole] [admin] do
   --   exerciseCmd platformPayable AcceptPlatformPayable
@@ -153,7 +147,5 @@ setup = script do
 
   -- submit admin do
   --   exerciseCmd jackAfterPlatformPayable AcceptUserProposal
-
-  -- 'david'
-
+  
   return ()
