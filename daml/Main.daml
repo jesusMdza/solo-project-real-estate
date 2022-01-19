@@ -5,9 +5,9 @@ import User
 
 setup : Script ()
 setup = script do
-  builder <- allocatePartyWithHint "Builder" (PartyIdHint "Builder")
   jack <- allocatePartyWithHint "Jack" (PartyIdHint "Jack")
   nicole <- allocatePartyWithHint "Nicole" (PartyIdHint "Nicole")
+  david <- allocatePartyWithHint "David" (PartyIdHint "David")
   admin <- allocatePartyWithHint "Admin" (PartyIdHint "Admin")
   public <- allocatePartyWithHint "Public" (PartyIdHint "Public")
 
@@ -23,6 +23,7 @@ setup = script do
     createCmd Platform
       with
         admin = admin
+        users = []
         account = platformBankAccount
 
   -- 'jack' creates a bank account in order to use real estate app
@@ -51,6 +52,12 @@ setup = script do
   -- 'admin' accepts
   jackUser <- submit admin do
     exerciseCmd jacksUserProposal AcceptUserProposal
+  
+  -- 'admin' updates Platform
+  jackUpdatedPlatform <- submit admin do
+    exerciseCmd newPlatform UpdateUsers
+      with
+        userToAdd = jack
     
   -- 'nicole' creates bank account
   nicolesBankAccount <- submit nicole do
@@ -72,9 +79,17 @@ setup = script do
   -- 'admin' accepts
   nicoleUser <- submit admin do
     exerciseCmd nicolesUserProposal AcceptUserProposal
+
+  -- 'admin' updates Platform
+  nicoleUpdatedPlatform <- submit admin do
+    createCmd Platform
+      with
+        admin
+        users = [jack, nicole]
+        account = platformBankAccount
   
   -- 'nicole' mints new property
-  nicoleNewProperty <- submit nicole do
+  (nicoleNewProperty, nicoleNewBankAccount, nicoleUpdateProposal) <- submit nicole do
     exerciseCmd nicoleUser MintProperty
       with
         public = [jack]
@@ -82,49 +97,52 @@ setup = script do
         newAddress = "123 Expensive Street"
         newBuilderRoyaltyRate = 0.08
         newPlatformRoyaltyRate = 0.04
+  
+  submit admin do
+    exerciseCmd nicoleUpdateProposal AcceptUserProposal
     
   -- 'nicole' creates new listing
-  createdListings <- submitMulti [nicole] [public] do
+  createdListings <- submitMulti [nicole] [jack] do
     createCmd Listing
       with
+        admin
+        users = [jack]
         owner = nicole
         properties = [nicoleNewProperty]
-        public
-  
-  -- 'jack' mints new property
-  jackNewProperty <- submit jack do
-    exerciseCmd jackUser MintProperty
-      with
-        public = [nicole, jack]
-        newPrice = 25000.00
-        newAddress = "442 Apple Lane"
-        newBuilderRoyaltyRate = 0.08
-        newPlatformRoyaltyRate = 0.04
-  
-  -- 'jack' updates the listing
-  jackUpdatesListings <- submitMulti [jack] [public] do
-    exerciseCmd createdListings ListProperty
-      with
-        user = jack
-        newProperty = jackNewProperty
 
   currentTime <- getTime
   
-  jackOffersToNicole <- submit jack do
+  jacksOffer <- submit jack do
     createCmd PropertyOffer
       with
         admin
         issuer = jack
         owner = nicole
         property = nicoleNewProperty
-        offerPrice = 25000.0
+        offerPrice = 50000.0
         timeSubmitted = currentTime
   
-  -- nicoleAcceptsJacksOffer <- submit nicole do
-  --   exerciseCmd jackOffersToNicole AcceptPropertyOffer
-  --     with
-  --       fromParty = jackUser
-  --       toParty = nicoleUser
-  --       platform = newPlatform
+  (_, propertyOfferPayable, platformPayable, conditionalPayable, _) <- submitMulti [nicole] [jack] do
+    exerciseCmd jacksOffer AcceptPropertyOffer
+      with
+        fromParty = jack
+        toParty = nicole
+        issuerAccount = jacksBankAccountWithDeposit
+        ownerAccount = nicoleNewBankAccount
+        minterAccount = nicolesBankAccount
+        platformAccount = platformBankAccount
+        platform = newPlatform
   
+  (proposal1, proposal2, _) <- submitMulti [nicole] [admin] do
+    exerciseCmd propertyOfferPayable AcceptOwnerPayable
+      with
+        sending = jackUser
+        receiving = nicoleUser
+
+  submit admin do
+    exerciseCmd proposal1 AcceptUserProposal
+
+  submit admin do
+    exerciseCmd proposal2 AcceptUserProposal
+
   return ()
