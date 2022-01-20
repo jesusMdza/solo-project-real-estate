@@ -145,9 +145,9 @@ template PropertyOffer
       AcceptPropertyOffer : 
         (
           ContractId PropertyAgreement, 
-          ContractId PropertyOfferPayable, 
-          ContractId PlatformPayable, 
-          Optional (ContractId ConditionalRoyaltyPayable), 
+          ContractId PropertyOfferPayableRequest, 
+          Optional (ContractId ConditionalRoyaltyPayableRequest), 
+          ContractId PlatformPayableRequest, 
           ContractId Property
         )
         with
@@ -178,44 +178,46 @@ template PropertyOffer
           assertMsg
             ("Failed due to insufficient funds." <> show fetchedIssuerAccount)
             (((fetchedIssuerAccount.balance - offerPrice) - ((offerPrice * fetchedProperty.builderRoyaltyRate) + (offerPrice * fetchedProperty.platformRoyaltyRate))) >= 0.0)
-        
+          
+
           propertyAgreement <- create PropertyAgreement 
             with 
               property = fetchedProperty
               ..
 
-          propertyOfferPayable <- create PropertyOfferPayable
+          -- nicole creates form saying how much 'jack' owes
+          propertyOfferPayableRequest <- create PropertyOfferPayableRequest
             with
+              issuer = toParty
+              owner = fromParty
               admin
-              amount = (offerPrice - ((offerPrice * fetchedProperty.platformRoyaltyRate) + (offerPrice * fetchedProperty.builderRoyaltyRate)))
-              issuerAccount 
-              ownerAccount
+              amount = offerPrice
               property = fetchedProperty
-              fromParty = fromParty
-              toParty = toParty
+              issuerAccount
+              ownerAccount
 
-          conditionalRoyaltyPayment <- if fetchedProperty.owner == fetchedProperty.issuer
+          conditionalRoyaltyPaymentRequest <- if fetchedProperty.owner == fetchedProperty.issuer
             then return None
-            else Some <$> create ConditionalRoyaltyPayable
+            else Some <$> create ConditionalRoyaltyPayableRequest
               with
+                issuer = platformParty
+                owner = fromParty
                 admin
                 amount = offerPrice * fetchedProperty.builderRoyaltyRate
+                property = fetchedProperty
                 issuerAccount 
                 minterAccount
-                property = fetchedProperty
-                fromParty = fromParty
-                toParty = toParty
 
-          platformPayable <- create PlatformPayable
+          platformPayableRequest <- create PlatformPayableRequest
             with
+              issuer = platformParty
+              owner = fromParty
               admin
               amount = offerPrice * fetchedProperty.platformRoyaltyRate
-              issuerAccount 
-              platformAccount = platformAccount
               property = fetchedProperty
-              fromParty = fromParty
-              toParty = platformParty
-            
+              issuerAccount 
+              platformAccount
+          
           newProperty <- create Property
             with
               admin
@@ -235,7 +237,7 @@ template PropertyOffer
           --     ownerAccount
           --     timeSubmitted = currentTime
 
-          return (propertyAgreement, propertyOfferPayable, platformPayable, conditionalRoyaltyPayment, newProperty)
+          return (propertyAgreement, propertyOfferPayableRequest, conditionalRoyaltyPaymentRequest, platformPayableRequest, newProperty)
     
       MakeCounterOffer : ContractId PropertyOffer
         with
@@ -460,3 +462,80 @@ template PropertyHolderPaymentInitiator
     --       let thirtyMinutes = convertRelTimeToMicroseconds (minutes 30)
 
     --       account <- 
+
+-- FORMS
+
+template PropertyOfferPayableRequest
+  with
+    issuer : Party
+    owner : Party
+    admin : Party
+    amount : Decimal
+    property : Property
+    issuerAccount : ContractId BankAccount
+    ownerAccount : ContractId BankAccount
+  where
+    signatory issuer
+
+    choice AcceptPropertyOfferPayableRequest : ContractId PropertyOfferPayable
+      controller owner
+      do
+        create PropertyOfferPayable
+          with
+            admin
+            amount
+            issuerAccount 
+            ownerAccount
+            property
+            fromParty = owner
+            toParty = issuer
+
+template ConditionalRoyaltyPayableRequest
+  with
+    issuer : Party
+    owner : Party
+    admin : Party
+    amount : Decimal
+    property : Property
+    issuerAccount : ContractId BankAccount
+    minterAccount : ContractId BankAccount
+  where
+    signatory issuer
+
+    choice AcceptConditionalRoyaltyPayableRequest : ContractId ConditionalRoyaltyPayable
+      controller owner
+      do
+        create ConditionalRoyaltyPayable
+          with
+            admin
+            amount
+            issuerAccount 
+            minterAccount
+            property
+            fromParty = owner
+            toParty = issuer
+
+template PlatformPayableRequest
+  with
+    issuer : Party
+    owner : Party
+    admin : Party
+    amount : Decimal
+    property : Property
+    issuerAccount : ContractId BankAccount
+    platformAccount : ContractId BankAccount
+  where
+    signatory issuer
+
+    choice AcceptPlatformPayableRequest : ContractId PlatformPayable
+      controller owner
+      do
+        create PlatformPayable
+          with
+            admin
+            amount
+            issuerAccount 
+            platformAccount
+            property
+            fromParty = owner
+            toParty = issuer
