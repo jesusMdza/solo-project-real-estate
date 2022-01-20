@@ -211,7 +211,7 @@ template PropertyOffer
               admin
               amount = offerPrice * fetchedProperty.platformRoyaltyRate
               issuerAccount 
-              ownerAccount = platformAccount
+              platformAccount = platformAccount
               property = fetchedProperty
               fromParty = fromParty
               toParty = platformParty
@@ -387,7 +387,7 @@ template PlatformPayable
     admin : Party
     amount : Decimal
     issuerAccount : ContractId BankAccount
-    ownerAccount : ContractId BankAccount
+    platformAccount : ContractId BankAccount
     property : Property
     fromParty : Party
     toParty : Party
@@ -395,14 +395,14 @@ template PlatformPayable
     signatory fromParty
     observer admin, toParty
 
-    controller toParty can
+    controller fromParty, toParty can
       AcceptPlatformPayable : (ContractId UserProposal, ContractId Platform, ContractId Receipt)
         with
           sending : ContractId User
           receiving : ContractId Platform
         do
           issuerAccountInfo <- fetch issuerAccount
-          receiverAccountInfo <- fetch ownerAccount
+          receiverAccountInfo <- fetch platformAccount
 
           fetchedSendingParty <- fetch sending
           fetchedPlatform <- fetch receiving
@@ -414,7 +414,7 @@ template PlatformPayable
           
           receivingBankAccount <- create BankAccount
             with
-              owner = admin
+              owner = toParty
               balance = receiverAccountInfo.balance + property.platformRoyaltyRate
 
           sendingUser <- create UserProposal

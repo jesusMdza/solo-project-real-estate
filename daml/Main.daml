@@ -91,7 +91,7 @@ setup = script do
         account = platformBankAccount
   
   -- 'nicole' mints new property
-  (nicoleNewProperty, nicoleNewBankAccount, nicoleUpdateProposal) <- submitMulti [nicole] [admin] do
+  (nicoleNewProperty, nicoleNewBankAccount, nicoleUpdateProposal) <- submit nicole do
     exerciseCmd nicoleUser MintProperty
       with
         newPrice = 50000.00
@@ -102,7 +102,7 @@ setup = script do
     exerciseCmd nicoleUpdateProposal AcceptUserProposal
     
   -- 'nicole' creates new listing
-  createdListings <- submitMulti [nicole] [jack] do
+  createdListings <- submit nicole do
     createCmd Listing
       with
         admin
@@ -122,7 +122,7 @@ setup = script do
         offerPrice = 50000.0
         timeSubmitted = currentTime
   
-  (_, propertyOfferPayable, platformPayable, conditionalPayable, _) <- submitMulti [nicole] [jack] do
+  (_, propertyOfferPayable, platformPayable, conditionalPayable, _) <- submitMulti [nicole, jack] [] do
     exerciseCmd jacksOffer AcceptPropertyOffer
       with
         fromParty = jack
@@ -134,17 +134,19 @@ setup = script do
         platformAccount = platformBankAccount
         platform = newPlatform
 
-  (bank1, bank2, _) <- submitMulti [nicole] [jack] do
+  (bank1, bank2, _) <- submitMulti [nicole, jack] [] do
     exerciseCmd propertyOfferPayable AcceptOwnerPayable
       with
         sending = jackUser
         receiving = nicoleUser
 
-  (jackNewProposal, platformUpdate, receipt) <- submitMulti [platform] [jack] do
+  (jackNewProposal, platformUpdate, receipt) <- submitMulti [platform, jack] [] do
     exerciseCmd platformPayable AcceptPlatformPayable
       with
         sending = jackUser
         receiving = newPlatform
+  
+  -- USE INITIATE & ACCEPT EXCEPT FOR USING SUBMITMULTI
   
   -- -- 'admin' accepts updated 'jack' user
   -- submit admin do
