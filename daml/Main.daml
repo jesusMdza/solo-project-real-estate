@@ -122,17 +122,17 @@ setup = script do
         offerPrice = 50000.0
         timeSubmitted = currentTime
   
-  (_, propertyOfferPayable, platformPayable, conditionalPayable, _) <- submit nicole do
-    exerciseCmd jacksOffer AcceptPropertyOffer
-      with
-        fromParty = jack
-        toParty = nicole
-        platformParty = platform
-        issuerAccount = jacksBankAccountWithDeposit
-        ownerAccount = nicoleNewBankAccount
-        minterAccount = nicolesBankAccount
-        platformAccount = platformBankAccount
-        platform = newPlatform
+  -- (_, propertyOfferPayable, platformPayable, conditionalPayable, _) <- submit nicole do
+  --   exerciseCmd jacksOffer AcceptPropertyOffer
+  --     with
+  --       fromParty = jack
+  --       toParty = nicole
+  --       platformParty = platform
+  --       issuerAccount = jacksBankAccountWithDeposit
+  --       ownerAccount = nicoleNewBankAccount
+  --       minterAccount = nicolesBankAccount
+  --       platformAccount = platformBankAccount
+  --       platform = newPlatform
 
   -- (bank1, bank2, _) <- submit nicole [] do
   --   exerciseCmd propertyOfferPayable AcceptOwnerPayable

@@ -4,51 +4,6 @@ import DA.Time
 import Bank
 import Property
 
-template UserProposal
-  with
-    user : Party
-    admin : Party
-    account : ContractId BankAccount
-    offers : [PropertyOffer]
-    propertiesOwned : [Property]
-  where
-    signatory user
-    
-    controller admin can
-      AcceptUserProposal : ContractId User
-        do
-          create User with ..
-          
-      RejectUserProposal : ()
-        do return ()
-
-template Listing 
-  with
-    admin : Party
-    users : [Party]
-    owner : Party
-    properties : [ContractId Property]
-  where
-    signatory owner
-    observer admin, users
-
-    nonconsuming choice ListProperty : ContractId Listing
-      with
-        user : Party
-        newProperty : ContractId Property
-      controller user
-      do
-        property <- fetch newProperty
-        assertMsg 
-          "User needs to be the owner in order to List the property." 
-          (property.owner == user)
-        
-        create Listing with 
-          admin
-          users
-          owner
-          properties = newProperty :: properties
-
 template User
   with
     user : Party
@@ -96,38 +51,50 @@ template User
           
           return (newProperty, newBankAccount, nicoleUpdateProposal)
 
-template Platform 
+template UserProposal
   with
-    platform : Party
+    user : Party
+    admin : Party
+    account : ContractId BankAccount
+    offers : [PropertyOffer]
+    propertiesOwned : [Property]
+  where
+    signatory user
+    
+    controller admin can
+      AcceptUserProposal : ContractId User
+        do
+          create User with ..
+          
+      RejectUserProposal : ()
+        do return ()
+
+template Listing 
+  with
     admin : Party
     users : [Party]
-    account : ContractId BankAccount
+    owner : Party
+    properties : [ContractId Property]
   where
-    signatory platform
+    signatory owner
     observer admin, users
 
-    controller admin can
-      nonconsuming UpdateUsers : ContractId Platform
-        with
-          userToAdd : Party
-        do
-          create Platform
-            with
-              users = userToAdd :: users
-              ..
-
-template Receipt
-  with
-    amount : Decimal
-    sender : Party
-    receiver : Party
-    timeReceived : Time
-  where
-    signatory sender, receiver
-
-    controller receiver can
-      Dismiss : ()
-        do return ()
+    nonconsuming choice ListProperty : ContractId Listing
+      with
+        user : Party
+        newProperty : ContractId Property
+      controller user
+      do
+        property <- fetch newProperty
+        assertMsg 
+          "User needs to be the owner in order to List the property." 
+          (property.owner == user)
+        
+        create Listing with 
+          admin
+          users
+          owner
+          properties = newProperty :: properties
 
 template PropertyOffer
   with
@@ -139,7 +106,7 @@ template PropertyOffer
     timeSubmitted : Time
   where
     signatory issuer
-    observer owner
+    observer admin, owner
 
     controller owner can
       AcceptPropertyOffer : 
@@ -476,6 +443,7 @@ template PropertyOfferPayableRequest
     ownerAccount : ContractId BankAccount
   where
     signatory issuer
+    observer owner
 
     choice AcceptPropertyOfferPayableRequest : ContractId PropertyOfferPayable
       controller owner
@@ -501,6 +469,7 @@ template ConditionalRoyaltyPayableRequest
     minterAccount : ContractId BankAccount
   where
     signatory issuer
+    observer owner
 
     choice AcceptConditionalRoyaltyPayableRequest : ContractId ConditionalRoyaltyPayable
       controller owner
@@ -526,6 +495,7 @@ template PlatformPayableRequest
     platformAccount : ContractId BankAccount
   where
     signatory issuer
+    observer owner
 
     choice AcceptPlatformPayableRequest : ContractId PlatformPayable
       controller owner
@@ -539,3 +509,36 @@ template PlatformPayableRequest
             property
             fromParty = owner
             toParty = issuer
+
+template Platform 
+  with
+    platform : Party
+    admin : Party
+    users : [Party]
+    account : ContractId BankAccount
+  where
+    signatory platform
+    observer admin, users
+
+    controller admin can
+      nonconsuming UpdateUsers : ContractId Platform
+        with
+          userToAdd : Party
+        do
+          create Platform
+            with
+              users = userToAdd :: users
+              ..
+
+template Receipt
+  with
+    amount : Decimal
+    sender : Party
+    receiver : Party
+    timeReceived : Time
+  where
+    signatory sender, receiver
+
+    controller receiver can
+      Dismiss : ()
+        do return ()
