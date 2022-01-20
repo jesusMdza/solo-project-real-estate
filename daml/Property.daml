@@ -9,44 +9,51 @@ template Property
     owner : Party
     address : Text
     price : Decimal
-    builderRoyaltyRate : Decimal
+    propertyRoyaltyRate : Decimal
     platformRoyaltyRate : Decimal
     priceHistory : [Decimal]
   where
     signatory issuer, owner
     observer admin
 
-    controller issuer, owner can
-      UpdatePropertyRoyaltyRate : ContractId Property
-        with
-          newPlatformRoyaltyRate : Decimal
-        do  
-          assertMsg 
-            "Issuer needs to be the owner in order to update the property royalty rate." 
-            (issuer == owner)
+    choice UpdatePropertyRoyaltyRate : ContractId Property
+      with
+        newPlatformRoyaltyRate : Decimal
+      controller issuer
+      do  
+        assertMsg 
+          "Issuer needs to be the owner in order to update the property royalty rate." 
+          (issuer == owner)
 
-          assertMsg 
-            "Owner needs to be the issuer in order to update the property royalty rate." 
-            (owner == issuer)
+        create Property with 
+          propertyRoyaltyRate = newPlatformRoyaltyRate
+          ..
+    
+    choice UpdateOwner : ContractId Property
+      with
+        newOwner : Party
+      controller owner
+      do
+        create Property with
+          owner = newOwner
+          ..
 
-          create Property with 
-            platformRoyaltyRate = newPlatformRoyaltyRate
-            ..
-
-      UpdatePrice : ContractId Property
-        with
-          newPrice : Decimal
-        do
-          create Property with
-            price = newPrice
-            priceHistory = newPrice :: priceHistory
-            ..
+    choice UpdatePrice : ContractId Property
+      with
+        newPrice : Decimal
+      controller owner
+      do
+        create Property with
+          price = newPrice
+          priceHistory = newPrice :: priceHistory
+          ..
 
 template PropertyCounterOffer
   with
     admin : Party
     issuer : Party
     owner : Party
+    propertyId : ContractId Property
     account : BankAccount
     property : Property
     offerPrice : Decimal
@@ -54,28 +61,38 @@ template PropertyCounterOffer
     signatory property.owner
     observer issuer, admin
     
-    controller owner can
-      CreateCounterOffer : ContractId PropertyCounterOffer
-        with
-          newOfferPrice : Decimal
-        do 
-          create PropertyCounterOffer
-            with
-              offerPrice = newOfferPrice
-              ..
+    choice CreateCounterOffer : ContractId PropertyCounterOffer
+      with
+        newOfferPrice : Decimal
+      controller owner
+      do 
+        create PropertyCounterOffer
+          with
+            offerPrice = newOfferPrice
+            ..
     
-    controller issuer can
-      AcceptCounterOffer : ContractId PropertyAgreement
-        do
-          create PropertyAgreement with ..
+    choice AcceptCounterOffer : ContractId PropertyAgreement
+      controller issuer
+      do
+        create PropertyAgreement with ..
 
 template PropertyAgreement
   with
     admin : Party
     issuer : Party
     owner : Party
+    propertyId : ContractId Property
     property : Property
     offerPrice : Decimal
   where
     signatory issuer, owner
     observer admin
+
+    choice Accept : ContractId Property
+      with
+        newOwner : Party
+      controller owner
+      do
+        exercise propertyId UpdateOwner
+          with
+            newOwner = owner

@@ -38,7 +38,7 @@ setup = script do
   jacksBankAccountWithDeposit <- submit jack do
     exerciseCmd jacksBankAccount MakeDeposit
       with
-        amountToDeposit = 100000000.00
+        amountToDeposit = 1_000_000.00
   
   -- 'jack creates user proposal
   jacksUserProposal <- submit jack do
@@ -91,15 +91,13 @@ setup = script do
         account = platformBankAccount
   
   -- 'nicole' mints new property
-  (nicoleNewProperty, nicoleNewBankAccount, nicoleUpdateProposal) <- submit nicole do
+  nicoleNewProperty <- submit nicole do
     exerciseCmd nicoleUser MintProperty
       with
+        currentUser = nicoleUser
         newPrice = 50000.00
         newAddress = "123 Expensive Street"
-        newBuilderRoyaltyRate = 0.08
-  
-  submit admin do
-    exerciseCmd nicoleUpdateProposal AcceptUserProposal
+        newPropertyRoyaltyRate = 0.08
     
   -- 'nicole' creates new listing
   createdListings <- submit nicole do
@@ -122,17 +120,17 @@ setup = script do
         offerPrice = 50000.0
         timeSubmitted = currentTime
   
-  -- (_, propertyOfferPayable, platformPayable, conditionalPayable, _) <- submit nicole do
-  --   exerciseCmd jacksOffer AcceptPropertyOffer
-  --     with
-  --       fromParty = jack
-  --       toParty = nicole
-  --       platformParty = platform
-  --       issuerAccount = jacksBankAccountWithDeposit
-  --       ownerAccount = nicoleNewBankAccount
-  --       minterAccount = nicolesBankAccount
-  --       platformAccount = platformBankAccount
-  --       platform = newPlatform
+  (propertyAgreement, propertyOfferPayableRequest, conditionalRoyaltyPaymentRequest, platformPayableRequest) <- submit nicole do
+    exerciseCmd jacksOffer AcceptPropertyOffer
+      with
+        fromParty = jack
+        toParty = nicole
+        platformParty = platform
+        issuerAccount = jacksBankAccountWithDeposit
+        ownerAccount = nicolesBankAccount
+        minterAccount = nicolesBankAccount
+        platformAccount = platformBankAccount
+        platform = newPlatform
 
   -- (bank1, bank2, _) <- submit nicole [] do
   --   exerciseCmd propertyOfferPayable AcceptOwnerPayable

@@ -14,19 +14,17 @@ template User
   where
     signatory user, admin
 
-    controller user can
-      nonconsuming MintProperty : (ContractId Property, ContractId BankAccount, ContractId UserProposal)
+    nonconsuming choice MintProperty : ContractId Property
         with
+          currentUser : ContractId User
           newPrice : Decimal
           newAddress : Text
-          newBuilderRoyaltyRate : Decimal
+          newPropertyRoyaltyRate : Decimal
+        controller user
         do
-          accountInfo <- fetch account
-
-          newBankAccount <- create BankAccount
+          exercise account MakeDeposit
             with
-              owner = user
-              balance = accountInfo.balance - 10000.0
+              amountToDeposit = -10000.0
 
           newProperty <- create Property 
             with 
@@ -35,21 +33,31 @@ template User
               owner = user
               price = newPrice
               address = newAddress
-              builderRoyaltyRate = newBuilderRoyaltyRate
+              propertyRoyaltyRate = newPropertyRoyaltyRate
               platformRoyaltyRate = 0.04
               priceHistory = [newPrice]
           
           fetchedProperty <- fetch newProperty
           
-          nicoleUpdateProposal <- create UserProposal
-            with 
-              user
-              admin
-              account = newBankAccount
-              offers
-              propertiesOwned = [fetchedProperty]
+          exercise currentUser UpdateUser
+            with
+              property = fetchedProperty
           
-          return (newProperty, newBankAccount, nicoleUpdateProposal)
+          return (newProperty)
+    
+    choice UpdateUser : ContractId User
+      with
+        property : Property
+      controller user
+      do
+        create User 
+          with
+            user
+            admin                                                                                       
+            account
+            offers
+            propertiesOwned = property :: propertiesOwned
+
 
 template UserProposal
   with
@@ -61,13 +69,14 @@ template UserProposal
   where
     signatory user
     
-    controller admin can
-      AcceptUserProposal : ContractId User
-        do
-          create User with ..
+    choice AcceptUserProposal : ContractId User
+      controller admin
+      do
+        create User with ..
           
-      RejectUserProposal : ()
-        do return ()
+    choice RejectUserProposal : ()
+      controller admin
+      do return ()
 
 template Listing 
   with
@@ -108,142 +117,132 @@ template PropertyOffer
     signatory issuer
     observer admin, owner
 
-    controller owner can
-      AcceptPropertyOffer : 
-        (
-          ContractId PropertyAgreement, 
-          ContractId PropertyOfferPayableRequest, 
-          Optional (ContractId ConditionalRoyaltyPayableRequest), 
-          ContractId PlatformPayableRequest, 
-          ContractId Property
-        )
-        with
-          fromParty : Party
-          toParty : Party
-          platformParty : Party
-          issuerAccount : ContractId BankAccount
-          ownerAccount : ContractId BankAccount
-          minterAccount : ContractId BankAccount
-          platformAccount : ContractId BankAccount
-          platform : ContractId Platform
-        do
-          currentTime <- getTime
-          let passedTime = convertRelTimeToMicroseconds (subTime currentTime timeSubmitted)
-          let fiveMinutes = convertRelTimeToMicroseconds (minutes 5)
+    choice AcceptPropertyOffer : 
+      (
+        ContractId PropertyAgreement, 
+        ContractId PropertyOfferPayableRequest, 
+        Optional (ContractId ConditionalRoyaltyPayableRequest), 
+        ContractId PlatformPayableRequest
+      )
+      with
+        fromParty : Party
+        toParty : Party
+        platformParty : Party
+        issuerAccount : ContractId BankAccount
+        ownerAccount : ContractId BankAccount
+        minterAccount : ContractId BankAccount
+        platformAccount : ContractId BankAccount
+        platform : ContractId Platform
+      controller owner
+      do
+        currentTime <- getTime
+        let passedTime = convertRelTimeToMicroseconds (subTime currentTime timeSubmitted)
+        let fiveMinutes = convertRelTimeToMicroseconds (minutes 5)
 
-          fetchedProperty <- fetch property
-          fetchedIssuerAccount <- fetch issuerAccount
+        fetchedProperty <- fetch property
+        fetchedIssuerAccount <- fetch issuerAccount
 
-          assertMsg
-            ("Offer price needs to match the property price of : " <> show fetchedProperty.price)
-            (offerPrice == fetchedProperty.price)
+        assertMsg
+          ("Offer price needs to match the property price of : " <> show fetchedProperty.price)
+          (offerPrice == fetchedProperty.price)
 
-          assertMsg
-            "Time duration of 5 minutes has passed. This contract has been rejected."
-            (passedTime <= fiveMinutes)
-          
-          assertMsg
-            ("Failed due to insufficient funds." <> show fetchedIssuerAccount)
-            (((fetchedIssuerAccount.balance - offerPrice) - ((offerPrice * fetchedProperty.builderRoyaltyRate) + (offerPrice * fetchedProperty.platformRoyaltyRate))) >= 0.0)
-          
+        assertMsg
+          "Time duration of 5 minutes has passed. This contract has been rejected."
+          (passedTime <= fiveMinutes)
+        
+        assertMsg
+          ("Failed due to insufficient funds." <> show fetchedIssuerAccount)
+          (((fetchedIssuerAccount.balance - offerPrice) - ((offerPrice * fetchedProperty.propertyRoyaltyRate) + (offerPrice * fetchedProperty.platformRoyaltyRate))) >= 0.0)
 
-          propertyAgreement <- create PropertyAgreement 
-            with 
-              property = fetchedProperty
-              ..
+        propertyAgreement <- create PropertyAgreement 
+          with 
+            propertyId = property
+            property = fetchedProperty
+            ..
 
-          -- nicole creates form saying how much 'jack' owes
-          propertyOfferPayableRequest <- create PropertyOfferPayableRequest
-            with
-              issuer = toParty
-              owner = fromParty
-              admin
-              amount = offerPrice
-              property = fetchedProperty
-              issuerAccount
-              ownerAccount
+        propertyOfferPayableRequest <- create PropertyOfferPayableRequest
+          with
+            issuer = toParty
+            owner = fromParty
+            admin
+            amount = offerPrice
+            property = fetchedProperty
+            issuerAccount
+            ownerAccount
 
-          conditionalRoyaltyPaymentRequest <- if fetchedProperty.owner == fetchedProperty.issuer
-            then return None
-            else Some <$> create ConditionalRoyaltyPayableRequest
-              with
-                issuer = platformParty
-                owner = fromParty
-                admin
-                amount = offerPrice * fetchedProperty.builderRoyaltyRate
-                property = fetchedProperty
-                issuerAccount 
-                minterAccount
-
-          platformPayableRequest <- create PlatformPayableRequest
+        conditionalRoyaltyPaymentRequest <- if fetchedProperty.owner == fetchedProperty.issuer
+          then return None
+          else Some <$> create ConditionalRoyaltyPayableRequest
             with
               issuer = platformParty
               owner = fromParty
               admin
-              amount = offerPrice * fetchedProperty.platformRoyaltyRate
+              amount = offerPrice * fetchedProperty.propertyRoyaltyRate
               property = fetchedProperty
               issuerAccount 
-              platformAccount
-          
-          newProperty <- create Property
-            with
-              admin
-              issuer = fetchedProperty.issuer
-              owner = issuer
-              address = fetchedProperty.address
-              price = fetchedProperty.price
-              builderRoyaltyRate = fetchedProperty.builderRoyaltyRate
-              platformRoyaltyRate = fetchedProperty.platformRoyaltyRate
-              priceHistory = fetchedProperty.priceHistory
-          
-          -- propertyHolderPaymentInitiator <- create PropertyHolderPaymentInitiator
-          --   with
-          --     amount = offerPrice * 0.01
-          --     admin
-          --     owner = issuer
-          --     ownerAccount
-          --     timeSubmitted = currentTime
+              minterAccount
 
-          return (propertyAgreement, propertyOfferPayableRequest, conditionalRoyaltyPaymentRequest, platformPayableRequest, newProperty)
-    
-      MakeCounterOffer : ContractId PropertyOffer
-        with
-          newOfferPrice : Decimal
-        do
-          currentTime <- getTime
-
-          create PropertyOffer with
-            offerPrice = newOfferPrice
-            timeSubmitted = currentTime
-            ..
-    
-      RejectProposal : ()
-        do return ()
-
-    controller issuer can
-      WithdrawProposal : ()
-        do return ()
-      
-      ReplaceOffer : (ContractId PropertyOffer, ContractId User)
-        with
-          user : ContractId User
-        do
-          currentTime <- getTime
-          fetchedProperty <- fetch property
-          fetchedUser <- fetch user 
-
-          propertyOffer <- create PropertyOffer with 
-            timeSubmitted = currentTime
-            ..
-          
-          updatedUser <- create User with
+        platformPayableRequest <- create PlatformPayableRequest
+          with
+            issuer = platformParty
+            owner = fromParty
             admin
-            user = issuer
-            account = fetchedUser.account
-            offers = this :: fetchedUser.offers
-            propertiesOwned = fetchedProperty :: fetchedUser.propertiesOwned
-          
-          return (propertyOffer, updatedUser)
+            amount = offerPrice * fetchedProperty.platformRoyaltyRate
+            property = fetchedProperty
+            issuerAccount 
+            platformAccount
+        
+        -- propertyHolderPaymentInitiator <- create PropertyHolderPaymentInitiator
+        --   with
+        --     amount = offerPrice * 0.01
+        --     admin
+        --     owner = issuer
+        --     ownerAccount
+        --     timeSubmitted = currentTime
+
+        return (propertyAgreement, propertyOfferPayableRequest, conditionalRoyaltyPaymentRequest, platformPayableRequest)
+    
+    choice MakeCounterOffer : ContractId PropertyOffer
+      with
+        newOfferPrice : Decimal
+      controller owner
+      do
+        currentTime <- getTime
+
+        create PropertyOffer with
+          offerPrice = newOfferPrice
+          timeSubmitted = currentTime
+          ..
+    
+    choice RejectProposal : ()
+      controller owner
+      do return ()
+
+    choice WithdrawProposal : ()
+      controller issuer
+      do return ()
+      
+    choice ReplaceOffer : (ContractId PropertyOffer, ContractId User)
+      with
+        user : ContractId User
+      controller issuer
+      do
+        currentTime <- getTime
+        fetchedProperty <- fetch property
+        fetchedUser <- fetch user 
+
+        propertyOffer <- create PropertyOffer with 
+          timeSubmitted = currentTime
+          ..
+        
+        updatedUser <- create User with
+          admin
+          user = issuer
+          account = fetchedUser.account
+          offers = this :: fetchedUser.offers
+          propertiesOwned = fetchedProperty :: fetchedUser.propertiesOwned
+        
+        return (propertyOffer, updatedUser)
 
 template PropertyOfferPayable
   with
@@ -258,37 +257,37 @@ template PropertyOfferPayable
     signatory fromParty
     observer admin, toParty
 
-    controller toParty can
-      AcceptOwnerPayable : (ContractId BankAccount, ContractId BankAccount, ContractId Receipt)
-        with
-          sending : ContractId User
-          receiving : ContractId User
-        do
-          issuerAccountInfo <- fetch issuerAccount
-          receiverAccountInfo <- fetch ownerAccount
+    choice AcceptOwnerPayable : (ContractId BankAccount, ContractId BankAccount, ContractId Receipt)
+      with
+        sending : ContractId User
+        receiving : ContractId User
+      controller toParty
+      do
+        issuerAccountInfo <- fetch issuerAccount
+        receiverAccountInfo <- fetch ownerAccount
 
-          fetchedSendingParty <- fetch sending
-          fetchedReceivingParty <- fetch receiving
+        fetchedSendingParty <- fetch sending
+        fetchedReceivingParty <- fetch receiving
 
-          sendingBankAccount <- create BankAccount
-            with
-              owner = fromParty
-              balance = issuerAccountInfo.balance - amount
-          
-          receivingBankAccount <- create BankAccount
-            with
-              owner = toParty
-              balance = receiverAccountInfo.balance + amount
+        sendingBankAccount <- create BankAccount
+          with
+            owner = fromParty
+            balance = issuerAccountInfo.balance - amount
+        
+        receivingBankAccount <- create BankAccount
+          with
+            owner = toParty
+            balance = receiverAccountInfo.balance + amount
 
-          currentTime <- getTime
-          newReceipt <- create Receipt
-            with
-              amount = property.price
-              sender = fromParty
-              receiver = toParty
-              timeReceived = currentTime
-          
-          return (sendingBankAccount, receivingBankAccount, newReceipt)
+        currentTime <- getTime
+        newReceipt <- create Receipt
+          with
+            amount = property.price
+            sender = fromParty
+            receiver = toParty
+            timeReceived = currentTime
+        
+        return (sendingBankAccount, receivingBankAccount, newReceipt)
 
 template ConditionalRoyaltyPayable
   with
@@ -303,53 +302,53 @@ template ConditionalRoyaltyPayable
     signatory fromParty
     observer admin, toParty
 
-    controller toParty can 
-      AcceptConditionalPayable : (ContractId User, ContractId User, ContractId Receipt)
-        with
-          sending : ContractId User
-          receiving : ContractId User
-        do
-          issuerAccountInfo <- fetch issuerAccount
-          receiverAccountInfo <- fetch minterAccount
+    choice AcceptConditionalPayable : (ContractId User, ContractId User, ContractId Receipt)
+      with
+        sending : ContractId User
+        receiving : ContractId User
+      controller toParty
+      do
+        issuerAccountInfo <- fetch issuerAccount
+        receiverAccountInfo <- fetch minterAccount
 
-          fetchedSendingParty <- fetch sending
-          fetchedReceivingParty <- fetch receiving
+        fetchedSendingParty <- fetch sending
+        fetchedReceivingParty <- fetch receiving
 
-          sendingBankAccount <- create BankAccount
-            with
-              owner = fromParty
-              balance = issuerAccountInfo.balance - amount
+        sendingBankAccount <- create BankAccount
+          with
+            owner = fromParty
+            balance = issuerAccountInfo.balance - amount
+        
+        receivingBankAccount <- create BankAccount
+          with
+            owner = toParty
+            balance = receiverAccountInfo.balance + amount
+
+        sendingUser <- create User
+          with
+            user = fromParty
+            admin
+            account = sendingBankAccount
+            offers = fetchedSendingParty.offers
+            propertiesOwned = fetchedSendingParty.propertiesOwned
           
-          receivingBankAccount <- create BankAccount
-            with
-              owner = toParty
-              balance = receiverAccountInfo.balance + amount
+        receivingUser <- create User
+          with
+            user = fetchedReceivingParty.user
+            admin
+            account = receivingBankAccount
+            offers = fetchedSendingParty.offers
+            propertiesOwned = fetchedSendingParty.propertiesOwned
 
-          sendingUser <- create User
-            with
-              user = fromParty
-              admin
-              account = sendingBankAccount
-              offers = fetchedSendingParty.offers
-              propertiesOwned = fetchedSendingParty.propertiesOwned
-            
-          receivingUser <- create User
-            with
-              user = fetchedReceivingParty.user
-              admin
-              account = receivingBankAccount
-              offers = fetchedSendingParty.offers
-              propertiesOwned = fetchedSendingParty.propertiesOwned
-
-          currentTime <- getTime
-          newReceipt <- create Receipt
-            with
-              amount = property.builderRoyaltyRate
-              sender = fromParty
-              receiver = toParty
-              timeReceived = currentTime
-          
-          return (sendingUser, receivingUser, newReceipt)
+        currentTime <- getTime
+        newReceipt <- create Receipt
+          with
+            amount = property.propertyRoyaltyRate
+            sender = fromParty
+            receiver = toParty
+            timeReceived = currentTime
+        
+        return (sendingUser, receivingUser, newReceipt)
 
 template PlatformPayable
   with
@@ -364,52 +363,52 @@ template PlatformPayable
     signatory fromParty
     observer admin, toParty
 
-    controller fromParty, toParty can
-      AcceptPlatformPayable : (ContractId UserProposal, ContractId Platform, ContractId Receipt)
-        with
-          sending : ContractId User
-          receiving : ContractId Platform
-        do
-          issuerAccountInfo <- fetch issuerAccount
-          receiverAccountInfo <- fetch platformAccount
+    choice AcceptPlatformPayable : (ContractId UserProposal, ContractId Platform, ContractId Receipt)
+      with
+        sending : ContractId User
+        receiving : ContractId Platform
+      controller toParty
+      do
+        issuerAccountInfo <- fetch issuerAccount
+        receiverAccountInfo <- fetch platformAccount
 
-          fetchedSendingParty <- fetch sending
-          fetchedPlatform <- fetch receiving
+        fetchedSendingParty <- fetch sending
+        fetchedPlatform <- fetch receiving
 
-          sendingBankAccount <- create BankAccount
-            with
-              owner = fromParty
-              balance = issuerAccountInfo.balance - property.platformRoyaltyRate
+        sendingBankAccount <- create BankAccount
+          with
+            owner = fromParty
+            balance = issuerAccountInfo.balance - property.platformRoyaltyRate
+        
+        receivingBankAccount <- create BankAccount
+          with
+            owner = toParty
+            balance = receiverAccountInfo.balance + property.platformRoyaltyRate
+
+        sendingUser <- create UserProposal
+          with
+            user = fromParty
+            admin
+            account = sendingBankAccount
+            offers = fetchedSendingParty.offers
+            propertiesOwned = fetchedSendingParty.propertiesOwned
           
-          receivingBankAccount <- create BankAccount
-            with
-              owner = toParty
-              balance = receiverAccountInfo.balance + property.platformRoyaltyRate
+        receivingUser <- create Platform
+          with
+            platform = fetchedPlatform.platform
+            admin
+            users = fetchedPlatform.users
+            account = receivingBankAccount
 
-          sendingUser <- create UserProposal
-            with
-              user = fromParty
-              admin
-              account = sendingBankAccount
-              offers = fetchedSendingParty.offers
-              propertiesOwned = fetchedSendingParty.propertiesOwned
-            
-          receivingUser <- create Platform
-            with
-              platform = fetchedPlatform.platform
-              admin
-              users = fetchedPlatform.users
-              account = receivingBankAccount
-
-          currentTime <- getTime
-          newReceipt <- create Receipt
-            with
-              amount = property.platformRoyaltyRate
-              sender = fromParty
-              receiver = toParty
-              timeReceived = currentTime
-          
-          return (sendingUser, receivingUser, newReceipt)
+        currentTime <- getTime
+        newReceipt <- create Receipt
+          with
+            amount = property.platformRoyaltyRate
+            sender = fromParty
+            receiver = toParty
+            timeReceived = currentTime
+        
+        return (sendingUser, receivingUser, newReceipt)
 
 template PropertyHolderPaymentInitiator
   with
@@ -520,15 +519,15 @@ template Platform
     signatory platform
     observer admin, users
 
-    controller admin can
-      nonconsuming UpdateUsers : ContractId Platform
-        with
-          userToAdd : Party
-        do
-          create Platform
-            with
-              users = userToAdd :: users
-              ..
+    choice UpdateUsers : ContractId Platform
+      with
+        userToAdd : Party
+      controller admin
+      do
+        create Platform
+          with
+            users = userToAdd :: users
+            ..
 
 template Receipt
   with
@@ -539,6 +538,6 @@ template Receipt
   where
     signatory sender, receiver
 
-    controller receiver can
-      Dismiss : ()
-        do return ()
+    choice Dismiss : ()
+      controller receiver
+      do return ()

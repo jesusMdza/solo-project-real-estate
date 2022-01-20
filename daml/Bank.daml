@@ -1,5 +1,6 @@
 module Bank where
 
+-- have a bank admin that verifies those funds are accurate
 template BankAccount
   with
     owner : Party
@@ -9,12 +10,17 @@ template BankAccount
 
     ensure
       balance >= 0.0
+    
+    -- key (owner) : (Party)
+    -- maintainer key
 
-    controller owner can
-      MakeDeposit : ContractId BankAccount
-        with
-          amountToDeposit : Decimal
-        do
-          create BankAccount with
-            owner
-            balance = balance + amountToDeposit
+    choice MakeDeposit : ContractId BankAccount
+      with
+        amountToDeposit : Decimal
+      controller owner 
+      do
+        create BankAccount with
+          owner
+          balance = balance + amountToDeposit
+            
+      

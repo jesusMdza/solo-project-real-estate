@@ -17,16 +17,17 @@ template LoanProposal
   where
     signatory issuer
 
-    controller owner can
-      AcceptLoanProposal : ContractId Loan
-        do
-          create Loan with
-            amount
-            issuer = owner
-            debtor = issuer
+    choice AcceptLoanProposal : ContractId Loan
+      controller owner
+      do
+        create Loan with
+          amount
+          issuer = owner
+          debtor = issuer
 
-      RejectLoanProposal : ()
-        do return ()
+    choice RejectLoanProposal : ()
+      controller owner
+      do return ()
 
 template Loan
   with
@@ -37,14 +38,14 @@ template Loan
     signatory issuer
     observer debtor
     
-    controller debtor can
-      AcceptLoan : ContractId BankAccount
-        with
-          debtorAccount : ContractId BankAccount
-        do
-          account <- fetch debtorAccount
+    choice AcceptLoan : ContractId BankAccount
+      with
+        debtorAccount : ContractId BankAccount
+      controller debtor
+      do
+        account <- fetch debtorAccount
 
-          create BankAccount 
-            with
-              owner = debtor
-              balance = account.balance + amount
+        create BankAccount 
+          with
+            owner = debtor
+            balance = account.balance + amount
